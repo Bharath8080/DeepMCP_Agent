@@ -1,0 +1,4 @@
+deepmcpagent[deep,dev]
+streamlit
+python-dotenv
+langchain-google-genai
