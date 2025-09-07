@@ -14,8 +14,6 @@ st.set_page_config(page_title="MCP WebSearch Chatbot", page_icon="🔍", layout=
 st.title("🔍 MCP WebSearch Chatbot")
 
 # Initialize session state
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
 if "graph" not in st.session_state:
     st.session_state.graph = None
 if "loader" not in st.session_state:
@@ -47,44 +45,29 @@ if st.session_state.graph is None:
     with st.spinner("🔄 Initializing MCP Agent..."):
         st.session_state.graph, st.session_state.loader = asyncio.run(init_agent())
 
-# Display previous chat messages
-for role, content in st.session_state.chat_history:
-    with st.chat_message(role):
-        st.markdown(content)
-
-# Input + Submit button
+# User input + submit button
 user_input = st.text_input("Ask me anything...", key="user_input")
 submit = st.button("Submit")
 
 if submit and user_input:
     query = user_input.strip()
+    st.write(f"**You asked:** {query}")
 
-    # Show user message
-    st.session_state.chat_history.append(("user", query))
-    with st.chat_message("user"):
-        st.markdown(query)
+    async def get_answer():
+        result = await st.session_state.graph.ainvoke(
+            {"messages": [{"role": "user", "content": query}]}
+        )
+        final_answer = ""
+        for msg in result["messages"]:
+            if msg.__class__.__name__ == "AIMessage" and msg.content:
+                final_answer += msg.content
+        return final_answer
+
+    try:
+        answer = asyncio.run(get_answer())
+        st.write(f"**Answer:** {answer}")
+    except Exception as e:
+        st.error(f"⚠️ Error: {str(e)}")
 
     # Clear the input safely
     st.session_state.pop("user_input", None)
-
-    # Placeholder for assistant response
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        message_placeholder.markdown("⏳ Thinking...")
-
-        # Run agent
-        async def get_answer():
-            result = await st.session_state.graph.ainvoke(
-                {"messages": [{"role": "user", "content": query}]}
-            )
-            final_answer = ""
-            for msg in result["messages"]:
-                if msg.__class__.__name__ == "AIMessage" and msg.content:
-                    final_answer += msg.content
-            return final_answer
-
-        answer = asyncio.run(get_answer())
-        message_placeholder.markdown(answer)
-
-    # Save assistant message
-    st.session_state.chat_history.append(("assistant", answer))
