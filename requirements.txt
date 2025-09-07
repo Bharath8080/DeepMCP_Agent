@@ -1,4 +1,5 @@
-deepmcpagent[deep,dev]
+deepmcpagent[deep]
+deepmcpagent[dev]
 chainlit
 python-dotenv
 langchain-google-genai
