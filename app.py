@@ -6,11 +6,12 @@ from dotenv import load_dotenv
 import chainlit as cl
 from langchain_google_genai import ChatGoogleGenerativeAI
 from deepmcpagent import HTTPServerSpec, build_deep_agent
+from datetime import datetime
 
 load_dotenv()
 
 # --- Config ---
-ASSISTANT_AUTHOR = "MCP Assistant"  # -> place avatar in public/avatars/mcp-assistant.png
+ASSISTANT_AUTHOR = "MCP Assistant"  # Avatar in public/avatars/mcp-assistant.png
 
 graph = None
 loader = None
@@ -29,23 +30,33 @@ async def init_agent():
         api_key=os.getenv("GOOGLE_API_KEY"),
     )
 
+    # Add current date/time to system instructions
+    now = datetime.now().strftime("%A, %d %B %Y, %I:%M %p")
+
     graph, loader = await build_deep_agent(
         servers=servers,
         model=model,
-        instructions="You are a helpful AI agent. Use MCP websearch tools to answer with live info.",
+        instructions=(
+            f"You are a powerful AI agent called MCP Assistant. "
+            f"Today is {now}. "
+            "Always provide accurate, up-to-date answers. "
+            "Use the MCP websearch tools whenever external or live information is needed. "
+            "Be precise, cite sources if available, and explain your reasoning clearly. "
+            "If the user asks about current events, rely on websearch. "
+            "Never guess—always prefer verified facts."
+        ),
     )
     return graph, loader
 
 @cl.on_chat_start
 async def start():
     global graph, loader
-    # Send an initializing assistant message (will show avatar when public/avatars/<name>.png exists)
+    # Initializing message
     init_msg = cl.Message(content="🔄 Initializing MCP Agent...", author=ASSISTANT_AUTHOR)
     await init_msg.send()
 
     try:
         graph, loader = await init_agent()
-        # Update the same message to avoid duplicates
         init_msg.content = "✅ Agent Ready! Ask me anything..."
         await init_msg.update()
     except Exception as e:
@@ -57,7 +68,7 @@ async def main(message: cl.Message):
     global graph
     user_query = message.content
 
-    # Show a "thinking" assistant message which we'll update with the final answer
+    # Thinking placeholder
     thinking_msg = cl.Message(content="⏳ Thinking...", author=ASSISTANT_AUTHOR)
     await thinking_msg.send()
 
@@ -67,10 +78,10 @@ async def main(message: cl.Message):
         return
 
     try:
-        # Call the MCP agent (keep this same pattern you had)
+        # Call MCP agent
         result = await graph.ainvoke({"messages": [{"role": "user", "content": user_query}]})
 
-        # Extract content from AIMessage objects returned by your agent
+        # Collect AI responses
         final_answer = ""
         for msg in result.get("messages", []):
             if msg.__class__.__name__ == "AIMessage" and getattr(msg, "content", None):
