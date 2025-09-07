@@ -2,3 +2,4 @@ deepmcpagent[deep,dev]
 streamlit
 python-dotenv
 langchain-google-genai
+nest_asyncio
