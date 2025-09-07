@@ -15,8 +15,22 @@ ASSISTANT_AUTHOR = "MCP Assistant"  # Avatar in public/avatars/mcp-assistant.png
 
 graph = None
 loader = None
+current_model = None
 
-async def init_agent():
+
+# ✅ Single selectable profile (removed Lite)
+@cl.set_chat_profiles
+async def chat_profile():
+    return [
+        cl.ChatProfile(
+            name="gemini-2.5-flash",
+            markdown_description="⚡ Using **Gemini 2.5 Flash** for fast and reliable reasoning with MCP websearch.",
+            icon="https://raw.githubusercontent.com/cryxnet/DeepMCPAgent/refs/heads/main/docs/images/icon.png",
+        ),
+    ]
+
+
+async def init_agent(selected_model: str):
     """Initialize MCP agent with websearch server + Gemini."""
     servers = {
         "websearch": HTTPServerSpec(
@@ -26,7 +40,7 @@ async def init_agent():
     }
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=selected_model,
         api_key=os.getenv("GOOGLE_API_KEY"),
     )
 
@@ -48,20 +62,26 @@ async def init_agent():
     )
     return graph, loader
 
+
 @cl.on_chat_start
 async def start():
-    global graph, loader
-    # Initializing message
-    init_msg = cl.Message(content="🔄 Initializing MCP Agent...", author=ASSISTANT_AUTHOR)
+    global graph, loader, current_model
+
+    # ✅ Always use only the one profile
+    selected_profile = cl.user_session.get("chat_profile")
+    current_model = selected_profile or "gemini-2.5-flash"
+
+    init_msg = cl.Message(content=f"🔄 Initializing MCP Agent with `{current_model}`...", author=ASSISTANT_AUTHOR)
     await init_msg.send()
 
     try:
-        graph, loader = await init_agent()
-        init_msg.content = "✅ Agent Ready! Ask me anything..."
+        graph, loader = await init_agent(current_model)
+        init_msg.content = f"✅ Agent Ready! Using `{current_model}`. Ask me anything..."
         await init_msg.update()
     except Exception as e:
         init_msg.content = f"❌ Initialization failed: {e}"
         await init_msg.update()
+
 
 @cl.on_message
 async def main(message: cl.Message):
