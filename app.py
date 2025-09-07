@@ -1,27 +1,19 @@
-# pip install streamlit python-dotenv langchain-google-genai deepmcpagent 
+# pip install chainlit python-dotenv langchain-google-genai deepmcpagent
 
 import os
 import asyncio
-import streamlit as st
 from dotenv import load_dotenv
+import chainlit as cl
 from langchain_google_genai import ChatGoogleGenerativeAI
 from deepmcpagent import HTTPServerSpec, build_deep_agent
 
-# Load API keys
 load_dotenv()
 
-st.set_page_config(page_title="MCP WebSearch Chatbot", page_icon="🔍", layout="centered")
-st.title("🔍 MCP WebSearch Chatbot")
+# --- Config ---
+ASSISTANT_AUTHOR = "MCP Assistant"  # -> place avatar in public/avatars/mcp-assistant.png
 
-# Initialize session state
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "graph" not in st.session_state:
-    st.session_state.graph = None
-if "loader" not in st.session_state:
-    st.session_state.loader = None
-if "query" not in st.session_state:
-    st.session_state.query = ""
+graph = None
+loader = None
 
 async def init_agent():
     """Initialize MCP agent with websearch server + Gemini."""
@@ -44,38 +36,49 @@ async def init_agent():
     )
     return graph, loader
 
-# Initialize the agent once
-if st.session_state.graph is None:
-    with st.spinner("🔄 Initializing MCP Agent..."):
-        st.session_state.graph, st.session_state.loader = asyncio.run(init_agent())
+@cl.on_chat_start
+async def start():
+    global graph, loader
+    # Send an initializing assistant message (will show avatar when public/avatars/<name>.png exists)
+    init_msg = cl.Message(content="🔄 Initializing MCP Agent...", author=ASSISTANT_AUTHOR)
+    await init_msg.send()
 
-# Input box with submit button
-query = st.text_input("Ask me anything...", key="query")
-submit = st.button("Submit")
+    try:
+        graph, loader = await init_agent()
+        # Update the same message to avoid duplicates
+        init_msg.content = "✅ Agent Ready! Ask me anything..."
+        await init_msg.update()
+    except Exception as e:
+        init_msg.content = f"❌ Initialization failed: {e}"
+        await init_msg.update()
 
-if submit and query:
-    # Clear history for fresh question
-    st.session_state.chat_history = []
+@cl.on_message
+async def main(message: cl.Message):
+    global graph
+    user_query = message.content
 
-    # Show user message
-    st.session_state.chat_history.append(("user", query))
-    st.markdown(f"**You asked:** {query}")
+    # Show a "thinking" assistant message which we'll update with the final answer
+    thinking_msg = cl.Message(content="⏳ Thinking...", author=ASSISTANT_AUTHOR)
+    await thinking_msg.send()
 
-    # Placeholder for assistant response
-    with st.spinner("⏳ Thinking..."):
+    if graph is None:
+        thinking_msg.content = "Agent not initialized. Try restarting the app."
+        await thinking_msg.update()
+        return
 
-        async def get_answer():
-            result = await st.session_state.graph.ainvoke(
-                {"messages": [{"role": "user", "content": query}]}
-            )
-            final_answer = ""
-            for msg in result["messages"]:
-                if msg.__class__.__name__ == "AIMessage" and msg.content:
-                    final_answer += msg.content
-            return final_answer
+    try:
+        # Call the MCP agent (keep this same pattern you had)
+        result = await graph.ainvoke({"messages": [{"role": "user", "content": user_query}]})
 
-        answer = asyncio.run(get_answer())
-        st.markdown(f"**Answer:** {answer}")
+        # Extract content from AIMessage objects returned by your agent
+        final_answer = ""
+        for msg in result.get("messages", []):
+            if msg.__class__.__name__ == "AIMessage" and getattr(msg, "content", None):
+                final_answer += msg.content
 
-    # Save assistant message
-    st.session_state.chat_history.append(("assistant", answer))
+        thinking_msg.content = final_answer or "No answer returned."
+        await thinking_msg.update()
+
+    except Exception as e:
+        thinking_msg.content = f"Error running agent: {e}"
+        await thinking_msg.update()
