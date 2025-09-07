@@ -1,16 +1,11 @@
-# app.py
-# 🔍 MCP WebSearch Chatbot
+# pip install streamlit python-dotenv langchain-google-genai deepmcpagent
 
 import os
 import asyncio
 import streamlit as st
-import nest_asyncio
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from deepmcpagent import HTTPServerSpec, build_deep_agent
-
-# Patch asyncio to allow nested loops (important for Streamlit)
-nest_asyncio.apply()
 
 # Load API keys
 load_dotenv()
@@ -25,7 +20,8 @@ if "graph" not in st.session_state:
     st.session_state.graph = None
 if "loader" not in st.session_state:
     st.session_state.loader = None
-
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
 
 async def init_agent():
     """Initialize MCP agent with websearch server + Gemini."""
@@ -48,34 +44,35 @@ async def init_agent():
     )
     return graph, loader
 
-
 # Initialize the agent once
 if st.session_state.graph is None:
     with st.spinner("🔄 Initializing MCP Agent..."):
-        loop = asyncio.get_event_loop()
-        st.session_state.graph, st.session_state.loader = loop.run_until_complete(init_agent())
-
+        st.session_state.graph, st.session_state.loader = asyncio.run(init_agent())
 
 # Display previous chat messages
 for role, content in st.session_state.chat_history:
     with st.chat_message(role):
         st.markdown(content)
 
+# User input with text box
+query = st.text_input("Ask me anything...", key="user_input")
 
-# Handle user input
-if query := st.chat_input("Ask me anything..."):
-    # Save user message
+if query and st.session_state.user_input != "":
+    # Show user message
     st.session_state.chat_history.append(("user", query))
     with st.chat_message("user"):
         st.markdown(query)
+
+    # Clear input after submission
+    st.session_state.user_input = ""
 
     # Placeholder for assistant response
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         message_placeholder.markdown("⏳ Thinking...")
 
+        # Run agent
         async def get_answer():
-            """Run query against MCP agent."""
             result = await st.session_state.graph.ainvoke(
                 {"messages": [{"role": "user", "content": query}]}
             )
@@ -85,11 +82,7 @@ if query := st.chat_input("Ask me anything..."):
                     final_answer += msg.content
             return final_answer
 
-        # Run async inside Streamlit safely
-        loop = asyncio.get_event_loop()
-        answer = loop.run_until_complete(get_answer())
-
-        # Show assistant response
+        answer = asyncio.run(get_answer())
         message_placeholder.markdown(answer)
 
     # Save assistant message
