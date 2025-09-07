@@ -20,8 +20,6 @@ if "graph" not in st.session_state:
     st.session_state.graph = None
 if "loader" not in st.session_state:
     st.session_state.loader = None
-if "user_input" not in st.session_state:
-    st.session_state.user_input = ""
 
 async def init_agent():
     """Initialize MCP agent with websearch server + Gemini."""
@@ -54,17 +52,20 @@ for role, content in st.session_state.chat_history:
     with st.chat_message(role):
         st.markdown(content)
 
-# User input with text box
-query = st.text_input("Ask me anything...", key="user_input")
+# Input + Submit button
+user_input = st.text_input("Ask me anything...", key="user_input")
+submit = st.button("Submit")
 
-if query and st.session_state.user_input != "":
+if submit and user_input:
+    query = user_input.strip()
+
     # Show user message
     st.session_state.chat_history.append(("user", query))
     with st.chat_message("user"):
         st.markdown(query)
 
-    # Clear input after submission
-    st.session_state.user_input = ""
+    # Clear the input safely
+    st.session_state.pop("user_input", None)
 
     # Placeholder for assistant response
     with st.chat_message("assistant"):
