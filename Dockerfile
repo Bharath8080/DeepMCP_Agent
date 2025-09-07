@@ -1,5 +1,5 @@
-# Use Python 3.10 slim as the base image
-FROM python:3.13-slim
+# Use a lighter, stable base image (3.10/3.11 has more prebuilt wheels)
+FROM python:3.12-slim
 
 # Set working directory
 WORKDIR /app
@@ -8,26 +8,31 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     CHAINLIT_HOST=0.0.0.0 \
-    CHAINLIT_PORT=8000
+    CHAINLIT_PORT=8000 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
+# Install only what’s really needed
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy requirements first (better caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Install Python dependencies (parallel, faster)
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install -r requirements.txt
+
+# Copy only app code (cached layers preserved if requirements.txt unchanged)
 COPY . .
 
-# Create a non-root user and switch to it
+# Create non-root user
 RUN useradd -m myuser && chown -R myuser:myuser /app
 USER myuser
 
-# Expose the port the app runs on
+# Expose port
 EXPOSE 8000
 
-# Command to run the application with host and port explicitly set
+# Run Chainlit
 CMD ["chainlit", "run", "app.py", "--port", "8000", "--host", "0.0.0.0"]
